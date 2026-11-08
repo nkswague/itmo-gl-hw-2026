@@ -1,23 +1,44 @@
 #version 330 core
 
-uniform sampler2D tex_2d;
-uniform vec4 color;
-
-in vec3 vert_col;
-in vec2 vert_tex;
+in vec2 local_pos;
 
 out vec4 out_col;
 
+uniform float halfWidth;
+uniform float circleRadius;
+uniform float circleCurvature;
+uniform float paletteRange;
+uniform float palettePower;
+
+vec3 circleColor(float radius) {
+    const vec3 darkOrange = vec3(0.70, 0.28, 0.06);
+    const vec3 darkViolet = vec3(0.30, 0.08, 0.46);
+
+    float position = clamp(log2(1.0 / radius) / paletteRange, 0.0, 1.0);
+    position = pow(position, palettePower);
+    return mix(darkOrange, darkViolet, position);
+}
+
+float innerShadowAlpha(float radialDistance, float radius) {
+    if (circleCurvature < 0.0 || radialDistance >= 0.0) {
+        return 0.0;
+    }
+
+    const float shadowWidth = 0.60;
+    float fade = 1.0 - smoothstep(0.0, shadowWidth, -radialDistance);
+    float strength = mix(0.15, 0.55, sqrt(clamp(radius, 0.0, 1.0)));
+    return strength * fade;
+}
+
 void main() {
-        // Y-координата у формата jpg перевернута относительно OpenGL
-        vec4 texel = texture(tex_2d, vec2(vert_tex.x, 1.0 - vert_tex.y));
+    float d = length(local_pos) - 1.0;
+    float outlineAlpha = abs(d) < halfWidth ? 1.0 : 0.0;
+    float shadowAlpha = innerShadowAlpha(d, circleRadius);
+    float alpha = max(outlineAlpha, shadowAlpha);
 
-        // https://ru.wikipedia.org/wiki/Оттенки_серого
-        float greyscale_factor = dot(texel.rgb, vec3(0.21, 0.71, 0.07));
-        vec3 semi_greyscale = mix(vec3(greyscale_factor), vert_col.rgb, 0.7f);
+    if (alpha <= 0.0) {
+        discard;
+    }
 
-        // Анимированный цвет из uniform
-        vec3 animated_color = mix(color.rgb, semi_greyscale, 0.7f);
-
-        out_col = vec4(animated_color, 1.0);
+    out_col = vec4(circleColor(circleRadius), alpha);
 }
